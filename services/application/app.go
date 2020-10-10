@@ -11,6 +11,7 @@ import (
 	"github.com/go-oauth2/oauth2/v4/manage"
 	"github.com/go-oauth2/oauth2/v4/server"
 	"github.com/go-oauth2/oauth2/v4/store"
+	"github.com/go-playground/validator/v10"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
@@ -20,7 +21,9 @@ import (
 
 	"github.com/Keda87/echo-oauth2/databases"
 	"github.com/Keda87/echo-oauth2/services/api/authentications"
+	"github.com/Keda87/echo-oauth2/services/api/users"
 	"github.com/Keda87/echo-oauth2/services/config"
+	"github.com/Keda87/echo-oauth2/services/helper"
 )
 
 type App struct {
@@ -36,6 +39,7 @@ func New(config *config.Config) *App {
 		config:    config,
 		DBManager: &databases.Manager{},
 	}
+	app.E.Validator = &helper.CustomValidator{Validator: validator.New()}
 
 	app.initDB()
 	app.initOauth2Server()
@@ -74,10 +78,21 @@ func (a *App) initMiddleware() {
 }
 
 func (a *App) initRoutes() {
+	// Repository definitions.
+	userRepo := users.NewRepository()
+
+	// Service definitions.
+	userSvc := users.NewService(a.DBManager.DB, userRepo)
+
 	// Controller definitions.
 	authController := authentications.NewController(a.Oauth2Server)
+	userController := users.NewController(userSvc)
 
 	v1 := a.E.Group("/v1")
+
+	v1users := v1.Group("/users")
+	v1users.POST("", userController.HandleRegisterUser)
+
 	v1oauth := v1.Group("/oauth")
 	v1oauth.POST("/token", authController.HandleObtainToken)
 }
